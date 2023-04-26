@@ -65,6 +65,10 @@ version_string = "pyNeuroML v{} (libNeuroML v{}, jNeuroML v{})".format(
     __version__, neuroml.__version__, JNEUROML_VERSION
 )
 
+FILE_NOT_FOUND_ERR = 13
+ARGUMENT_ERR = 14
+UNKNOWN_ERR = 15
+
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -412,7 +416,7 @@ def extract_lems_definition_files(
             )
         except OSError as err:
             logger.critical(err)
-            sys.exit(-1)
+            sys.exit(UNKNOWN_ERR)
     else:
         path = tempfile.mkdtemp()
 
@@ -563,7 +567,6 @@ def convert_to_units(nml2_quantity: str, unit: str) -> float:
 
     for un in model.units:
         if un.symbol == unit:
-
             new_value = si_value / (un.scale * pow(10, un.power)) - un.offset
             if not un.dimension == dim:
                 raise Exception(
@@ -745,7 +748,7 @@ def read_neuroml2_file(
     nml2_file_name: str,
     include_includes: bool = False,
     verbose: bool = False,
-    already_included: list = [],
+    already_included: list = None,
     optimized: bool = False,
     check_validity_pre_include: bool = False,
 ) -> NeuroMLDocument:
@@ -765,11 +768,14 @@ def read_neuroml2_file(
     :type check_validity_pre_include: bool
     :returns: nml.NeuroMLDocument object containing the read NeuroML file(s)
     """
+    if already_included is None:
+        already_included = []
+
     logger.info("Loading NeuroML2 file: %s" % nml2_file_name)
 
     if not os.path.isfile(nml2_file_name):
         logger.critical("Unable to find file: %s!" % nml2_file_name)
-        sys.exit()
+        sys.exit(FILE_NOT_FOUND_ERR)
 
     if nml2_file_name.endswith(".h5") or nml2_file_name.endswith(".hdf5"):
         nml2_doc = loaders.NeuroMLHdf5Loader.load(nml2_file_name, optimized=optimized)
@@ -779,25 +785,30 @@ def read_neuroml2_file(
     base_path = os.path.dirname(os.path.realpath(nml2_file_name))
 
     if include_includes:
-        logger.info(
-            "Including included files (included already: {})".format(already_included)
-        )
+        if verbose:
+            logger.info(
+                "Including included files (included already: {})".format(
+                    already_included
+                )
+            )
 
         incl_to_remove = []
         for include in nml2_doc.includes:
             incl_loc = os.path.abspath(os.path.join(base_path, include.href))
             if incl_loc not in already_included:
-
                 inc = True  # type: typing.Union[bool, tuple[bool, str]]
                 if check_validity_pre_include:
                     inc = validate_neuroml2(incl_loc, verbose_validate=False)
 
-                logger.debug(
-                    "Loading included NeuroML2 file: {} (base: {}, resolved: {}, checking {})".format(
-                        include.href, base_path, incl_loc, check_validity_pre_include
-                    )
-                )
                 if inc:
+                    logger.debug(
+                        "Loading included NeuroML2 file: {} (base: {}, resolved: {}, checking {})".format(
+                            include.href,
+                            base_path,
+                            incl_loc,
+                            check_validity_pre_include,
+                        )
+                    )
                     nml2_sub_doc = read_neuroml2_file(
                         incl_loc,
                         True,
@@ -847,7 +858,6 @@ def quick_summary(nml2_doc: NeuroMLDocument) -> str:
     membs = inspect.getmembers(nml2_doc)
 
     for memb in membs:
-
         if isinstance(memb[1], list) and len(memb[1]) > 0 and not memb[0].endswith("_"):
             info += "  {}:\n    [".format(memb[0])
             for entry in memb[1]:
@@ -1114,7 +1124,7 @@ def read_lems_file(
     """
     if not os.path.isfile(lems_file_name):
         logger.critical("Unable to find file: %s!" % lems_file_name)
-        sys.exit()
+        sys.exit(FILE_NOT_FOUND_ERR)
 
     model = lems_model.Model(
         include_includes=include_includes,
@@ -1656,20 +1666,24 @@ def run_lems_with_eden(
     :type verbose: bool
     """
 
-
     import eden_simulator
+
     logger.info(
         "Running a simulation of %s in EDEN v%s"
         % (
             lems_file_name,
-            eden_simulator.__version__ if hasattr(eden_simulator, "__version__") else "???",
+            eden_simulator.__version__
+            if hasattr(eden_simulator, "__version__")
+            else "???",
         )
     )
 
     results = eden_simulator.runEden(lems_file_name)
 
     if verbose:
-        logger.info("Completed simulation in EDEN, saved results: %s"%(results.keys()))
+        logger.info(
+            "Completed simulation in EDEN, saved results: %s" % (results.keys())
+        )
 
     if load_saved_data:
         logger.warning("Event saving is not yet supported in EDEN!!")
@@ -1678,7 +1692,6 @@ def run_lems_with_eden(
         return results
     else:
         return True
-
 
 
 def reload_saved_data(
@@ -1941,7 +1954,7 @@ def confirm_file_exists(filename: str) -> None:
     """
     if not os.path.isfile(filename):
         logger.critical("Unable to find file: %s!" % filename)
-        sys.exit()
+        sys.exit(FILE_NOT_FOUND_ERR)
 
 
 def confirm_neuroml_file(filename: str) -> None:
@@ -2043,6 +2056,8 @@ def evaluate_arguments(args):
         logger.critical("Please specify NeuroML/LEMS files to process")
         return
 
+    run_multi = False
+
     for f in args.input_files:
         if args.nogui:
             post_args = "-nogui"
@@ -2051,7 +2066,6 @@ def evaluate_arguments(args):
             confirm_lems_file(f)
             post_args = "-sedml"
         elif args.neuron is not None:
-
             # Note: either a lems file or nml2 file is allowed here...
             confirm_file_exists(f)
 
@@ -2061,7 +2075,7 @@ def evaluate_arguments(args):
                     "The '-neuron' option was given an invalid "
                     "number of arguments: %d given, 0-4 required" % num_neuron_args
                 )
-                sys.exit(-1)
+                sys.exit(ARGUMENT_ERR)
 
             other_args = [(a if a != "-neuron" else "") for a in args.neuron]
             post_args = "-neuron %s" % " ".join(other_args)
@@ -2077,7 +2091,7 @@ def evaluate_arguments(args):
                     "The '-netpyne' option was given an invalid "
                     "number of arguments: %d given, 0-4 required" % num_netpyne_args
                 )
-                sys.exit(-1)
+                sys.exit(ARGUMENT_ERR)
 
             other_args = [(a if a != "-netpyne" else "") for a in args.netpyne]
             post_args = "-netpyne %s" % " ".join(other_args)
@@ -2092,7 +2106,7 @@ def evaluate_arguments(args):
                     "The '-eden' option was given an invalid "
                     "number of arguments: %d given, 0-4 required" % num_eden_args
                 )
-                sys.exit(-1)
+                sys.exit(ARGUMENT_ERR)
 
             other_args = [(a if a != "-eden" else "") for a in args.eden]
             post_args = "-eden %s" % " ".join(other_args)
@@ -2164,7 +2178,7 @@ def evaluate_arguments(args):
                             e, engines
                         )
                     )
-                    sys.exit(-1)
+                    sys.exit(ARGUMENT_ERR)
 
                 # if a valid engine was provided, we try the level again
                 try:
@@ -2172,7 +2186,7 @@ def evaluate_arguments(args):
                     logger.info("Level selected: {}".format(level))
                 except ValueError:
                     logger.info("Incorrect value for level: {}.".format(level[:-1]))
-                    sys.exit(-1)
+                    sys.exit(ARGUMENT_ERR)
 
             generate_nmlgraph(f, level, engine)
             sys.exit(0)
@@ -2201,19 +2215,31 @@ def evaluate_arguments(args):
 
             logger.info("Done with MatrixHandler...")
 
-            exit()
+            exit(0)
         elif args.validate:
             confirm_neuroml_file(f)
             pre_args = "-validate"
             exit_on_fail = True
+            run_multi = True
+
         elif args.validatev1:
             confirm_neuroml_file(f)
             pre_args = "-validatev1"
             exit_on_fail = True
+            run_multi = True
 
+        if run_multi is False:
+            run_jneuroml(
+                pre_args,
+                f,
+                post_args,
+                max_memory=args.java_max_memory,
+                exit_on_fail=exit_on_fail,
+            )
+    if run_multi:
         run_jneuroml(
             pre_args,
-            f,
+            " ".join(args.input_files),
             post_args,
             max_memory=args.java_max_memory,
             exit_on_fail=exit_on_fail,
@@ -2287,14 +2313,7 @@ def run_jneuroml(
     retcode = -1
 
     try:
-        command = 'java -Xmx%s %s -jar  "%s" %s "%s" %s' % (
-            max_memory,
-            pre_jar,
-            jar_path,
-            pre_args,
-            target_file,
-            post_args,
-        )
+        command = f'java -Xmx{max_memory} {pre_jar} -jar  "{jar_path}" {pre_args} {target_file} {post_args}'
         retcode, output = execute_command_in_dir(
             command, exec_in_dir, verbose=verbose, prefix=" jNeuroML >>  "
         )
@@ -2325,7 +2344,7 @@ def run_jneuroml(
         logger.error("*** Command: %s ***" % command)
         logger.error("Output: %s" % output)
         if exit_on_fail:
-            sys.exit(-1)
+            sys.exit(UNKNOWN_ERR)
         else:
             if return_string:
                 return (False, output)
@@ -2393,7 +2412,7 @@ def run_jneuroml_with_realtime_output(
         logger.error("*** Execution of jnml has failed! ***")
         logger.error("*** Command: %s ***" % command)
         if exit_on_fail:
-            sys.exit(-1)
+            sys.exit(UNKNOWN_ERR)
         else:
             return False
 
@@ -2445,7 +2464,7 @@ def execute_command_in_dir_with_realtime_output(
         )
         with p.stdout:
             for line in iter(p.stdout.readline, ""):
-                print("# %s"%line.strip())
+                print("# %s" % line.strip())
         p.wait()  # wait for the subprocess to exit
 
         print("####################################################################")
@@ -2515,10 +2534,12 @@ def execute_command_in_dir(
 
         return_string = return_string.decode("utf-8")  # For Python 3
 
-        logger.info(
-            "Command completed. Output: \n %s%s"
-            % (prefix, return_string.replace("\n", "\n " + prefix))
-        )
+        logger.info("Command completed successfully!")
+        if verbose:
+            logger.info(
+                "Output: \n %s%s"
+                % (prefix, return_string.replace("\n", "\n " + prefix))
+            )
         return (0, return_string)
 
     except AttributeError:
@@ -2539,6 +2560,7 @@ def execute_command_in_dir(
     except Exception as e:
         logger.critical("*** Unknown problem running command: %s" % e)
         return (-1, str(e))
+
 
 """
     As usually saved by jLEMS, etc. First column is time (in seconds), multiple other columns
@@ -2613,7 +2635,6 @@ def extract_annotations(nml2_file: str) -> None:
                     )
 
                     for li in _find_elements(info, "li", rdf=True):
-
                         attr = _get_attr_in_element(li, "resource", rdf=True)
                         if attr:
                             annotations[desc].append({kind: attr})

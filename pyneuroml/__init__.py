@@ -1,8 +1,8 @@
 import logging
 
-__version__ = "0.7.2"
+__version__ = "0.7.6"
 
-JNEUROML_VERSION = "0.12.0"
+JNEUROML_VERSION = "0.12.1"
 
 # Define a logger for the package
 logging.basicConfig(

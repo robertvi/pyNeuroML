@@ -6,7 +6,8 @@ echo
 echo "################################################"
 echo "##   Running unit tests"
 
-pytest --cov=pyneuroml .
+# skip a few tests that segfault etc. on GH
+pytest --cov=pyneuroml -m "not localonly" .
 
 run_neuron_examples=false
 
@@ -41,6 +42,9 @@ echo "##   Validate with jNeuroML"
 
 pynml -validate NML2_SingleCompHHCell.nml
 
+
+echo "##   Multi-validate with jNeuroML"
+pynml -validate *.channel.nml
 
 
 echo
