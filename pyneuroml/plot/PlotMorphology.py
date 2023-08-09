@@ -253,7 +253,10 @@ def plot_2D(
     ) = extract_position_info(nml_model, verbose)
 
     if title is None:
-        title = "2D plot of %s from %s" % (nml_model.networks[0].id, nml_file)
+        if len(nml_model.networks) > 0:
+            title = "2D plot of %s from %s" % (nml_model.networks[0].id, nml_file)
+        else:
+            title = "2D plot of %s" % (nml_model.cells[0].id)
 
     if verbose:
         logger.debug(f"positions: {positions}")
@@ -1011,7 +1014,7 @@ def plot_segment_groups_curtain_plots(
     verbose: bool = False,
     nogui: bool = False,
     save_to_file: typing.Optional[str] = None,
-    overlay_data: typing.Dict[str, typing.List[typing.Any]] = None,
+    overlay_data: typing.Optional[typing.Dict[str, typing.List[typing.Any]]] = None,
     overlay_data_label: str = "",
     width: typing.Union[float, int] = 4,
     colormap_name: str = "viridis",

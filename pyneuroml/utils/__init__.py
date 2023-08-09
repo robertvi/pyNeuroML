@@ -5,15 +5,14 @@ PyNeuroML
 
 Copyright 2023 NeuroML Contributors
 """
-
 import math
 import copy
 import logging
 import re
 import numpy
+
 import neuroml
 from neuroml.loaders import read_neuroml2_file
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -164,11 +163,11 @@ def rotate_cell(
 
     :param cell: cell object to rotate
     :type cell: neuroml.Cell
-    :param x: angle to rotate in x direction, in radians
+    :param x: angle to rotate around x axis, in radians
     :type x: float
-    :param y: angle to rotate in y direction, in radians
+    :param y: angle to rotate around y axis, in radians
     :type y: float
-    :param z: angle to rotate in z direction, in radians
+    :param z: angle to rotate around z axis, in radians
     :type z: float
     :param order: rotation order in terms of x, y,  and z
     :type order: str
