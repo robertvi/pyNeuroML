@@ -31,7 +31,7 @@ from pyneuroml.utils.plot import (
     autoscale_matplotlib_plot,
     add_scalebar_to_matplotlib_plot,
     add_line_to_matplotlib_2D_plot,
-    DEFAULTS
+    DEFAULTS,
 )
 from neuroml import SegmentGroup, Cell, Segment, NeuroMLDocument
 from neuroml.neuro_lex_ids import neuro_lex_ids
@@ -140,6 +140,7 @@ def plot_from_console(a: typing.Optional[typing.Any] = None, **kwargs: str):
     print(a)
     if a.interactive3d:
         from pyneuroml.plot.PlotMorphologyVispy import plot_interactive_3D
+
         plot_interactive_3D(
             nml_file=a.nml_file,
             min_width=a.min_width,
@@ -239,7 +240,9 @@ def plot_2D(
     elif isinstance(nml_file, NeuroMLDocument):
         nml_model = nml_file
     else:
-        raise TypeError("Passed model is not a NeuroML file path, nor a neuroml.Cell, nor a neuroml.NeuroMLDocument")
+        raise TypeError(
+            "Passed model is not a NeuroML file path, nor a neuroml.Cell, nor a neuroml.NeuroMLDocument"
+        )
 
     (
         cell_id_vs_cell,
@@ -468,10 +471,19 @@ def plot_2D_cell_morphology(
 
         acolormap = matplotlib.colormaps[colormap_name]
         norm = matplotlib.colors.Normalize(vmin=data_min, vmax=data_max)
-        fig.colorbar(
-            matplotlib.cm.ScalarMappable(norm=norm, cmap=acolormap),
-            label=overlay_data_label,
-        )
+        if data_min == data_max:
+            fig.colorbar(
+                matplotlib.cm.ScalarMappable(norm=norm, cmap=acolormap),
+                label=overlay_data_label,
+                ax=ax,
+                ticks=[data_min],
+            )
+        else:
+            fig.colorbar(
+                matplotlib.cm.ScalarMappable(norm=norm, cmap=acolormap),
+                label=overlay_data_label,
+                ax=ax,
+            )
 
     # random default color
     for seg in cell.morphology.segments:
