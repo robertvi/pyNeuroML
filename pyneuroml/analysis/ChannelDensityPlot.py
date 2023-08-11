@@ -55,6 +55,7 @@ substitute_ion_channel_names = {"LeakConductance": "Pas"}
 
 CHANNEL_DENSITY_PLOTTER_CLI_DEFAULTS = {
     "nogui": False,
+    "noDistancePlots": False,
 }
 
 
@@ -79,6 +80,12 @@ def channel_density_plotter_process_args():
         help="Name of the NeuroML 2 file(s)",
     )
 
+    parser.add_argument(
+        "-noDistancePlots",
+        action="store_true",
+        default=CHANNEL_DENSITY_PLOTTER_CLI_DEFAULTS["noDistancePlots"],
+        help=("Do not generate distance plots"),
+    )
     parser.add_argument(
         "-nogui",
         action="store_true",
@@ -462,7 +469,7 @@ def get_conductance_density_for_segments(
     :returns: dictionary with keys as segment ids and the conductance density
         for that segment as the value
 
-    .. versionadded:: 1.0.8
+    .. versionadded:: 1.0.10
 
     """
     data = {}
@@ -551,7 +558,7 @@ def plot_channel_densities(
     different channel densities for that ion. If neither are provided, plots
     for all ion channels on the cell are generated.
 
-    .. versionadded:: 1.0.8
+    .. versionadded:: 1.0.10
 
     :param cell: a NeuroML cell object
     :type cell: neuroml.Cell
@@ -662,7 +669,7 @@ def plot_channel_densities(
                         min_width=morph_min_width,
                         overlay_data=data,
                         overlay_data_label="(S/m2)",
-                        save_to_file=f"{cd.id}.cd.png",
+                        save_to_file=f"{cell.id}_{cd.id}.cd.png",
                         datamin=ymin,
                         plane2d=plane2d,
                         nogui=not show_plots_already,
@@ -687,12 +694,15 @@ def plot_channel_densities(
                             title_above_plot=True,
                             xaxis="Distance from soma (um)",
                             yaxis="g density (S/m2)",
-                            save_figure_to=f"{cd.id}_cd_vs_dist.png",
+                            save_figure_to=f"{cell.id}_{cd.id}_cd_vs_dist.png",
                             show_plot_already=show_plots_already,
                             linestyles=[" "],
                             linewidths=["0"],
                             markers=["."],
                         )
+            if show_plots_already is False:
+                plt.close()
+
     elif ion_channels is not None:
         if type(ion_channels) == str:
             ion_channel_list = []
@@ -760,7 +770,7 @@ def plot_channel_densities(
                     min_width=morph_min_width,
                     overlay_data=data,
                     overlay_data_label="(S/m2)",
-                    save_to_file=f"{ion_channel}.ion.png",
+                    save_to_file=f"{cell.id}_{ion_channel}.ion.png",
                     datamin=ymin,
                     plane2d=plane2d,
                     nogui=not show_plots_already,
@@ -785,12 +795,14 @@ def plot_channel_densities(
                         title_above_plot=True,
                         xaxis="Distance from soma (um)",
                         yaxis="g density (S/m2)",
-                        save_figure_to=f"{ion_channel}_ion_vs_dist.png",
+                        save_figure_to=f"{cell.id}_{ion_channel}_ion_vs_dist.png",
                         show_plot_already=show_plots_already,
                         linestyles=[" "],
                         linewidths=["0"],
                         markers=["."],
                     )
+            if show_plots_already is False:
+                plt.close()
     # will never reach here
 
 
@@ -809,7 +821,11 @@ def channel_density_plotter_runner(a=None, **kwargs):
                 cell_file, include_includes=True, verbose=False, optimized=True
             )
             # show all plots at end
-            plot_channel_densities(nml_doc.cells[0], show_plots_already=not a.nogui)
+            plot_channel_densities(
+                nml_doc.cells[0],
+                show_plots_already=not a.nogui,
+                distance_plots=not a.no_distance_plots,
+            )
 
 
 if __name__ == "__main__":
