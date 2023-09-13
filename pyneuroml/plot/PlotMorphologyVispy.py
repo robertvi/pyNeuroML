@@ -372,7 +372,10 @@ def plot_interactive_3D(
     marker_colors = []
 
     if title is None:
-        title = f"{nml_model.networks[0].id} from {nml_file}"
+        try:
+            title = f"{nml_model.networks[0].id} from {nml_file}"
+        except IndexError:
+            title = f"{nml_model.cells[0].id} from {nml_file}"
 
     logger.debug(f"positions: {positions}")
     logger.debug(f"pop_id_vs_cell: {pop_id_vs_cell}")
