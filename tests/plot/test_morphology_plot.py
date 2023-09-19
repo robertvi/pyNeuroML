@@ -115,6 +115,54 @@ class TestMorphologyPlot(BaseTestCase):
             self.assertIsFile(filename)
             pl.Path(filename).unlink()
 
+    def test_2d_plotter_network_with_spec(self):
+        """Test plot_2D function with a network of a few cells with specs."""
+        nml_file = "tests/plot/L23-example/TestNetwork.net.nml"
+        ofile = pl.Path(nml_file).name
+        # percentage
+        for plane in ["xy", "yz", "xz"]:
+            filename = f"test_morphology_plot_2d_spec_{ofile.replace('.', '_', 100)}_{plane}.png"
+            # remove the file first
+            try:
+                pl.Path(filename).unlink()
+            except FileNotFoundError:
+                pass
+
+            plot_2D(
+                nml_file,
+                nogui=True,
+                plane2d=plane,
+                save_to_file=filename,
+                plot_spec={"point_fraction": 0.5},
+            )
+
+            self.assertIsFile(filename)
+            pl.Path(filename).unlink()
+
+        # more detailed plot_spec
+        for plane in ["xy", "yz", "xz"]:
+            filename = f"test_morphology_plot_2d_spec_{ofile.replace('.', '_', 100)}_{plane}.png"
+            # remove the file first
+            try:
+                pl.Path(filename).unlink()
+            except FileNotFoundError:
+                pass
+
+            plot_2D(
+                nml_file,
+                nogui=True,
+                plane2d=plane,
+                save_to_file=filename,
+                plot_spec={
+                    "point_cells": ["HL23VIP"],
+                    "detailed_cells": ["HL23PYR"],
+                    "schematic_cells": ["HL23PV"],
+                    "constant_cells": ["HL23SST"],
+                },
+            )
+            self.assertIsFile(filename)
+            pl.Path(filename).unlink()
+
     def test_2d_plotter_network(self):
         """Test plot_2D function with a network of a few cells."""
         nml_file = "tests/plot/L23-example/TestNetwork.net.nml"
@@ -132,7 +180,7 @@ class TestMorphologyPlot(BaseTestCase):
             plot_2D(nml_file, nogui=True, plane2d=plane, save_to_file=filename)
 
             self.assertIsFile(filename)
-            pl.Path(filename).unlink()
+            # pl.Path(filename).unlink()
 
     def test_2d_constant_plotter_network(self):
         """Test plot_2D_schematic function with a network of a few cells."""
@@ -196,7 +244,36 @@ class TestMorphologyPlot(BaseTestCase):
     def test_3d_morphology_plotter_vispy_network(self):
         """Test plot_3D_cell_morphology_vispy function."""
         nml_file = "tests/plot/L23-example/TestNetwork.net.nml"
-        plot_interactive_3D(nml_file, min_width=1, nogui=True, theme="dark")
+        plot_interactive_3D(nml_file, min_width=1, nogui=False, theme="dark")
+
+    @pytest.mark.localonly
+    def test_3d_morphology_plotter_vispy_network_with_spec(self):
+        """Test plot_3D_cell_morphology_vispy function."""
+        nml_file = "tests/plot/L23-example/TestNetwork.net.nml"
+        plot_interactive_3D(
+            nml_file,
+            min_width=1,
+            nogui=True,
+            theme="dark",
+            plot_spec={"point_fraction": 0.5},
+        )
+
+    @pytest.mark.localonly
+    def test_3d_morphology_plotter_vispy_network_with_spec2(self):
+        """Test plot_3D_cell_morphology_vispy function."""
+        nml_file = "tests/plot/L23-example/TestNetwork.net.nml"
+        plot_interactive_3D(
+            nml_file,
+            min_width=1,
+            nogui=True,
+            theme="dark",
+            plot_spec={
+                "point_cells": ["HL23VIP"],
+                "detailed_cells": ["HL23PYR"],
+                "schematic_cells": ["HL23PV"],
+                "constant_cells": ["HL23SST"],
+            },
+        )
 
     @pytest.mark.localonly
     def test_3d_plotter_vispy(self):
