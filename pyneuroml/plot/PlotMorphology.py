@@ -144,7 +144,7 @@ def plot_from_console(a: typing.Optional[typing.Any] = None, **kwargs: str):
     :param kwargs: other arguments
     """
     a = build_namespace(DEFAULTS, a, **kwargs)
-    print(a)
+    logger.debug(a)
     if a.interactive3d:
         from pyneuroml.plot.PlotMorphologyVispy import plot_interactive_3D
 
@@ -251,21 +251,34 @@ def plot_2D(
     if verbose:
         print("Plotting %s" % nml_file)
 
-    if type(nml_file) == str:
+    # do not recursive read the file, the extract_position_info function will
+    # do that for us, from a copy of the model
+    if type(nml_file) is str:
         nml_model = read_neuroml2_file(
             nml_file,
-            include_includes=True,
+            include_includes=False,
             check_validity_pre_include=False,
             verbose=False,
             optimized=True,
         )
-
+        if title is None:
+            try:
+                title = f"{nml_model.networks[0].id} from {nml_file}"
+            except IndexError:
+                title = f"{nml_model.cells[0].id} from {nml_file}"
     elif isinstance(nml_file, Cell):
         nml_model = NeuroMLDocument(id="newdoc")
         nml_model.add(nml_file)
+        if title is None:
+            title = f"{nml_model.cells[0].id}"
 
     elif isinstance(nml_file, NeuroMLDocument):
         nml_model = nml_file
+        if title is None:
+            try:
+                title = f"{nml_model.networks[0].id} from {nml_file.id}"
+            except IndexError:
+                title = f"{nml_model.cells[0].id} from {nml_file.id}"
     else:
         raise TypeError(
             "Passed model is not a NeuroML file path, nor a neuroml.Cell, nor a neuroml.NeuroMLDocument"
@@ -277,13 +290,9 @@ def plot_2D(
         positions,
         pop_id_vs_color,
         pop_id_vs_radii,
-    ) = extract_position_info(nml_model, verbose)
-
-    if title is None:
-        if len(nml_model.networks) > 0:
-            title = "2D plot of %s from %s" % (nml_model.networks[0].id, nml_file)
-        else:
-            title = "2D plot of %s" % (nml_model.cells[0].id)
+    ) = extract_position_info(
+        nml_model, verbose, nml_file if type(nml_file) is str else ""
+    )
 
     if verbose:
         logger.debug(f"positions: {positions}")
@@ -291,6 +300,9 @@ def plot_2D(
         logger.debug(f"cell_id_vs_cell: {cell_id_vs_cell}")
         logger.debug(f"pop_id_vs_color: {pop_id_vs_color}")
         logger.debug(f"pop_id_vs_radii: {pop_id_vs_radii}")
+
+    # not used, clear up
+    del cell_id_vs_cell
 
     fig, ax = get_new_matplotlib_morph_plot(title, plane2d)
     axis_min_max = [float("inf"), -1 * float("inf")]
@@ -318,8 +330,8 @@ def plot_2D(
         except KeyError:
             pass
 
-    for pop_id in pop_id_vs_cell:
-        cell = pop_id_vs_cell[pop_id]  # type: Cell
+    while pop_id_vs_cell:
+        pop_id, cell = pop_id_vs_cell.popitem()
         pos_pop = positions[pop_id]  # type: typing.Dict[typing.Any, typing.List[float]]
 
         # reinit point_cells for each loop
@@ -334,8 +346,8 @@ def plot_2D(
             except KeyError:
                 pass
 
-        for cell_index in pos_pop:
-            pos = pos_pop[cell_index]
+        while pos_pop:
+            cell_index, pos = pos_pop.popitem()
             radius = pop_id_vs_radii[pop_id] if pop_id in pop_id_vs_radii else 10
             color = pop_id_vs_color[pop_id] if pop_id in pop_id_vs_color else None
 
