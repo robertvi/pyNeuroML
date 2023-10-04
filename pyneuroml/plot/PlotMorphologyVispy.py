@@ -17,7 +17,7 @@ import typing
 
 import numpy
 import progressbar
-from neuroml import Cell, NeuroMLDocument, SegmentGroup
+from neuroml import Cell, NeuroMLDocument, SegmentGroup, Segment
 from neuroml.neuro_lex_ids import neuro_lex_ids
 from pyneuroml.pynml import read_neuroml2_file
 from pyneuroml.utils import extract_position_info
@@ -42,6 +42,8 @@ VISPY_THEME = {
     "dark": {"bg": "black", "fg": "white"},
 }
 PYNEUROML_VISPY_THEME = "light"
+
+MAX_MESH_PRECISION = 3
 
 
 def add_text_to_vispy_3D_plot(
@@ -304,15 +306,19 @@ def plot_interactive_3D(
         print(f"Plotting {nml_file}")
 
     if type(nml_file) is str:
-        nml_model = read_neuroml2_file(
-            nml_file,
-            include_includes=False,
-            check_validity_pre_include=False,
-            verbose=False,
-            optimized=True,
-        )
-        # load bits we need to plot the model
-        load_minimal_morphplottable__model(nml_model, nml_file)
+        # load without optimization for older HDF5 API
+        # TODO: check if this is required: must for MultiscaleISN
+        if nml_file.endswith(".h5"):
+            nml_model = read_neuroml2_file(nml_file)
+        else:
+            nml_model = read_neuroml2_file(
+                nml_file,
+                include_includes=False,
+                check_validity_pre_include=False,
+                verbose=False,
+                optimized=True,
+            )
+            load_minimal_morphplottable__model(nml_model, nml_file)
 
         if title is None:
             try:
@@ -352,9 +358,35 @@ def plot_interactive_3D(
     logger.debug(f"pop_id_vs_color: {pop_id_vs_color}")
     logger.debug(f"pop_id_vs_radii: {pop_id_vs_radii}")
 
-    # not used, clear up
-    total_cells = len(cell_id_vs_cell)
-    logger.info(f"Plotting {total_cells} cells in {len(pop_id_vs_cell)} populations")
+    # calculate total cells and segments to be plotted
+    total_cells = 0
+    total_segments = 0
+    for pop_id, cell in pop_id_vs_cell.items():
+        total_cells += len(positions[pop_id])
+        try:
+            total_segments += len(positions[pop_id]) * len(cell.morphology.segments)
+        except AttributeError:
+            total_segments += len(positions[pop_id])
+
+    mesh_precision = MAX_MESH_PRECISION
+    # calculate total segments and reduce precision accordingly
+    # fewer the meshes, better the performance
+    if total_segments > 200 and total_segments <= 1000:
+        mesh_precision = MAX_MESH_PRECISION - 1
+    elif total_segments > 1000:
+        mesh_precision = MAX_MESH_PRECISION - 2
+
+    # minimum precision is 1
+    if mesh_precision < 1:
+        mesh_precision = 1
+
+    logger.info(
+        f"Plotting {total_segments} segments in {total_cells} cells in {len(pop_id_vs_cell)} populations"
+    )
+    logger.debug(
+        f"Grouping into mesh instances by diameters at {mesh_precision} decimal places"
+    )
+    # not used later, clear up
     del cell_id_vs_cell
 
     if len(positions) > 1:
@@ -502,6 +534,7 @@ def plot_interactive_3D(
                         current_view=current_view,
                         nogui=True,
                         meshdata=meshdata,
+                        mesh_precision=mesh_precision,
                     )
                 elif (
                     plot_type == "detailed"
@@ -521,6 +554,7 @@ def plot_interactive_3D(
                         min_width=min_width,
                         nogui=True,
                         meshdata=meshdata,
+                        mesh_precision=mesh_precision,
                     )
             pbar_ctr += 1
 
@@ -543,8 +577,9 @@ def plot_3D_cell_morphology(
     axis_min_max: typing.List = [float("inf"), -1 * float("inf")],
     nogui: bool = True,
     plot_type: str = "constant",
-    theme="light",
-    meshdata=None,
+    theme: str = "light",
+    meshdata: typing.Optional[typing.Dict[typing.Any, typing.Any]] = None,
+    mesh_precision: int = 2,
 ):
     """Plot the detailed 3D morphology of a cell using vispy.
     https://vispy.org/
@@ -609,6 +644,10 @@ def plot_3D_cell_morphology(
     :param meshdata: dictionary used to store mesh related data for vispy
         visualisation
     :type meshdata: dict
+    :param mesh_precision: what decimal places to use to group meshes into
+        instances: more precision means more detail (meshes), means less
+        performance
+    :type mesh_precision: int
     :raises: ValueError if `cell` is None
 
     """
@@ -656,26 +695,18 @@ def plot_3D_cell_morphology(
     if meshdata is None:
         meshdata = {}
 
-    # for heuristics
-    total_segs = len(cell.morphology.segments)
-
     for seg in cell.morphology.segments:
         p = cell.get_actual_proximal(seg.id)
         d = seg.distal
         length = cell.get_segment_length(seg.id)
 
-        # full precision
-        if total_segs <= 200:
-            key = (f"{p.diameter/2}", f"{d.diameter/2}", f"{length}")
-        # 3 decimals
-        elif total_segs > 200 and total_segs <= 1000:
-            key = (f"{p.diameter/2:.3f}", f"{d.diameter/2:.3f}", f"{length:.3f}")
-        # 2 decimals
-        elif total_segs > 1000 and total_segs <= 2000:
-            key = (f"{p.diameter/2:.2f}", f"{d.diameter/2:.2f}", f"{length:.2f}")
-        # 1 decimals
-        else:
-            key = (f"{p.diameter/2:.1f}", f"{d.diameter/2:.1f}", f"{length:.1f}")
+        # round up to precision
+        r = round(p.diameter / 2, mesh_precision)
+        key = (
+            f"{r:.{mesh_precision}f}",
+            f"{r:.{mesh_precision}f}",
+            f"{round(length, mesh_precision):.{mesh_precision}f}",
+        )
 
         seg_color = "white"
         if color is None:
@@ -705,6 +736,7 @@ def plot_3D_cell_morphology(
             meshdata[key].append((p, d, seg_color, offset))
         except KeyError:
             meshdata[key] = [(p, d, seg_color, offset)]
+        logger.debug(f"meshdata added: {key}: {(p, d, seg_color, offset)}")
 
     if not nogui:
         create_instanced_meshes(meshdata, plot_type, current_view, min_width)
@@ -754,11 +786,19 @@ def create_instanced_meshes(meshdata, plot_type, current_view, min_width):
             r1 = min_width
             r2 = min_width
 
+        if r1 < min_width:
+            r1 = min_width
+        if r2 < min_width:
+            r2 = min_width
+
         seg_mesh = None
-        # for points, we set the prox/dist to None
-        # we can't check if r1 == r2 == length because there may be cylinders
-        # with such a set of parameters
-        if r1 == r2 and i[0][0] is None and i[0][1] is None:
+        # 1: for points, we set the prox/dist to None since they only have
+        # positions.
+        # 2: single compartment cells with r1, r2, and length 0
+        # Note: we can't check if r1 == r2 == length because there
+        # may be cylinders with such a set of parameters
+
+        if r1 == r2 and ((i[0][0] is None and i[0][1] is None) or (length == 0.0)):
             seg_mesh = create_sphere(9, 9, radius=r1)
             logger.debug(f"Created spherical mesh template with radius {r1}")
         else:
@@ -843,7 +883,8 @@ def plot_3D_schematic(
     current_view: scene.ViewBox = None,
     theme: str = "light",
     color: typing.Optional[str] = "Cell",
-    meshdata: typing.Dict[typing.Any, typing.Any] = None,
+    meshdata: typing.Optional[typing.Dict[typing.Any, typing.Any]] = None,
+    mesh_precision: int = 2,
 ) -> None:
     """Plot a 3D schematic of the provided segment groups using vispy.
     layer..
@@ -960,9 +1001,9 @@ def plot_3D_schematic(
         )
 
         key = (
-            f"{first_prox.diameter/2:.1f}",
-            f"{last_dist.diameter/2:.1f}",
-            f"{length:.1f}",
+            f"{round(first_prox.diameter/2, mesh_precision):.{mesh_precision}f}",
+            f"{round(last_dist.diameter/2, mesh_precision):.{mesh_precision}f}",
+            f"{round(length, mesh_precision):.{mesh_precision}f}",
         )
 
         branch_color = color
